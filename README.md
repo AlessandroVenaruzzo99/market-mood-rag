@@ -174,6 +174,21 @@ usando solo i modelli Ollama già installati. Commissioni, slippage, spread, fis
 corporate actions e liquidità reale non sono simulati completamente: il backtest è uno
 strumento educativo e può essere soggetto a overfitting.
 
+L'allocazione offre due modalità. **Sleeve uguali per ticker** riserva, ad esempio,
+un terzo del capitale a ciascuna società: il denaro resta liquido finché quel ticker
+non raggiunge la soglia di ingresso, e dopo la vendita torna liquido nella stessa
+sleeve. **Pesi market cap correnti** applica invece un peso proporzionale alle
+capitalizzazioni correnti; è una simulazione di scenario, non una ricostruzione
+storica point-in-time, perché le capitalizzazioni passate non sono recuperate.
+
+Non esiste una distribuzione universalmente più profittevole. L'equal weight offre
+più esposizione alle società piccole e più concentrazione relativa; il market-cap
+weight riduce il rischio idiosincratico ma tende a concentrare il capitale nei titoli
+più grandi. La scelta prudente per confrontare la qualità del segnale MMM è partire
+da sleeve uguali, poi confrontare entrambe le modalità sullo stesso periodo e contro
+lo stesso ETF. Una performance passata non dimostra che una soglia o un metodo sarà
+profittevole in futuro.
+
 
 
 

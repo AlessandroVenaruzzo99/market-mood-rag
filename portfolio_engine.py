@@ -96,12 +96,34 @@ def trim_prices(prices: dict[str, pd.DataFrame], period: str) -> dict[str, pd.Da
     return trimmed
 
 
+def market_cap_weights(tickers: Iterable[str]) -> dict[str, float]:
+    """Return current market-cap weights for a scenario allocation.
+
+    Current capitalization is deliberately exposed as a scenario assumption; it is
+    not historical point-in-time data and should not be interpreted as such.
+    """
+    caps: dict[str, float] = {}
+    for ticker in tickers:
+        try:
+            info = yf.Ticker(ticker).fast_info
+            value = float(getattr(info, "market_cap", 0) or 0)
+            if np.isfinite(value) and value > 0:
+                caps[ticker] = value
+        except (AttributeError, TypeError, ValueError, OSError):
+            continue
+    if not caps:
+        raise ValueError("Capitalizzazioni di mercato non disponibili per i ticker selezionati.")
+    total = sum(caps.values())
+    return {ticker: caps.get(ticker, 0.0) / total for ticker in tickers}
+
+
 def simulate_portfolio(prices: dict[str, pd.DataFrame], capital: float,
                        entry_threshold: float, exit_threshold: float,
                        dpo_period: int = 20, wyckoff_period: int = 20,
                        speed_period: int = 30, normalization_window: int = 100,
                        commission_rate: float = 0.0,
-                       start_date: pd.Timestamp | None = None) -> tuple[pd.DataFrame, pd.DataFrame, list[Trade]]:
+                       start_date: pd.Timestamp | None = None,
+                       allocation_weights: dict[str, float] | None = None) -> tuple[pd.DataFrame, pd.DataFrame, list[Trade]]:
     if capital <= 0:
         raise ValueError("Il capitale deve essere maggiore di zero.")
     if entry_threshold >= exit_threshold:
@@ -111,7 +133,12 @@ def simulate_portfolio(prices: dict[str, pd.DataFrame], capital: float,
     if not 0 <= commission_rate < 1:
         raise ValueError("La commissione deve essere compresa tra 0% e 100%.")
 
-    allocation = capital / len(prices)
+    if allocation_weights is None:
+        allocation_weights = {ticker: 1 / len(prices) for ticker in prices}
+    if set(allocation_weights) != set(prices) or any(weight <= 0 for weight in allocation_weights.values()):
+        raise ValueError("I pesi di allocazione devono essere positivi e presenti per ogni ticker.")
+    weight_total = sum(allocation_weights.values())
+    allocation_weights = {ticker: weight / weight_total for ticker, weight in allocation_weights.items()}
     all_dates = sorted(set().union(*(frame.index for frame in prices.values())))
     if start_date is not None:
         all_dates = [date for date in all_dates if date >= start_date]
@@ -126,6 +153,7 @@ def simulate_portfolio(prices: dict[str, pd.DataFrame], capital: float,
                                  dpo_period, wyckoff_period, speed_period, normalization_window)
         frame = frame.copy()
         frame["MMM"] = mmm
+        allocation = capital * allocation_weights[ticker]
         cash = allocation
         shares = 0.0
         entry_price = None

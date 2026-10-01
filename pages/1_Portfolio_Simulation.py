@@ -10,7 +10,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from portfolio_engine import download_prices, simulate_portfolio, trim_prices
+from portfolio_engine import (
+    download_prices,
+    market_cap_weights,
+    simulate_portfolio,
+    trim_prices,
+)
 
 
 OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
@@ -109,10 +114,15 @@ with st.sidebar:
     benchmark_label = st.selectbox("ETF benchmark", list(BENCHMARKS), index=0)
     benchmark_ticker = BENCHMARKS[benchmark_label]
     period_label = st.selectbox("Arco temporale", list(PERIODS), index=3)
+    allocation_mode = st.selectbox(
+        "Distribuzione del capitale",
+        ["Sleeve uguali per ticker", "Pesi market cap correnti"],
+        help="La liquidità resta parcheggiata nella sleeve del ticker finché MMM non attiva l'acquisto.",
+    )
     entry_threshold = st.slider("Soglia acquisto MMM", -100, 0, -75)
     exit_threshold = st.slider("Soglia vendita MMM", 0, 100, 70)
     commission_percent = st.number_input("Commissione per operazione (%)", min_value=0.0, max_value=10.0, value=0.0, step=0.05)
-    st.caption("Il capitale viene ripartito equamente tra i ticker. Sono ammesse frazioni di azione.")
+    st.caption("Il capitale non investito resta parcheggiato; sono ammesse frazioni di azione.")
     run = st.button("Simula portafoglio", type="primary", use_container_width=True)
     st.caption(f"Benchmark selezionato: {benchmark_label}")
 
@@ -129,6 +139,10 @@ if run:
             if not window_prices:
                 raise ValueError("Nessun dato storico nell'intervallo selezionato.")
             start_date = min(frame.index[0] for frame in window_prices.values())
+            if allocation_mode == "Pesi market cap correnti":
+                allocation_weights = market_cap_weights(window_prices)
+            else:
+                allocation_weights = {ticker: 1 / len(window_prices) for ticker in window_prices}
             benchmark_prices = trim_prices(
                 download_prices([benchmark_ticker], DOWNLOAD_PERIODS[selected_period]),
                 selected_period,
@@ -137,6 +151,7 @@ if run:
                 prices, capital, entry_threshold, exit_threshold,
                 commission_rate=commission_percent / 100,
                 start_date=start_date,
+                allocation_weights=allocation_weights,
             )
             benchmark_frame = benchmark_prices.get(benchmark_ticker)
             if benchmark_frame is None or benchmark_frame.empty:
@@ -154,6 +169,8 @@ if run:
             "tickers": list(window_prices), "entry": entry_threshold, "exit": exit_threshold,
             "benchmark": benchmark_ticker,
             "benchmark_label": benchmark_label,
+            "allocation_mode": allocation_mode,
+            "allocation_weights": allocation_weights,
         }
     except ValueError as exc:
         st.error(str(exc))
@@ -186,6 +203,14 @@ metric_columns[3].metric("P/L benchmark", f"{benchmark_profit:+,.2f} {result['cu
 if benchmark_return is not None:
     st.caption(f"Differenza rendimento vs benchmark: {portfolio_return - benchmark_return:+.2f} punti percentuali.")
 selected_benchmark_label = result.get("benchmark_label", benchmark_label if "benchmark_label" in locals() else "ETF benchmark")
+st.subheader("Allocazione iniziale")
+allocation_table = pd.DataFrame({
+    "Ticker": list(result["allocation_weights"]),
+    "Peso %": [weight * 100 for weight in result["allocation_weights"].values()],
+    "Capitale riservato": [result["capital"] * weight for weight in result["allocation_weights"].values()],
+})
+st.caption(f"{result.get('allocation_mode', 'Sleeve uguali per ticker')}. Il capitale riservato torna liquido alla vendita del ticker.")
+st.dataframe(allocation_table, hide_index=True, use_container_width=True)
 render_chart(equity, result["capital"], selected_benchmark_label)
 st.caption("Il confronto usa rendimenti normalizzati sullo stesso capitale. La valuta della quota ETF può differire dalla valuta selezionata e l'effetto cambio non è convertito.")
 
@@ -211,6 +236,10 @@ if models:
                 "ticker": result.get("benchmark", "non disponibile"),
                 "label": result.get("benchmark_label", "ETF benchmark"),
                 "return_percent": benchmark_return,
+            },
+            "allocation": {
+                "mode": result.get("allocation_mode"),
+                "weights": result.get("allocation_weights"),
             },
         }
         try:
