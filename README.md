@@ -189,6 +189,10 @@ usate e non sostituisce silenziosamente i dati mancanti con la capitalizzazione
 corrente. Quando Yahoo non espone un'osservazione precedente, può essere usata la
 prima osservazione vicina successiva, indicata nella tabella; è quindi una stima
 point-in-time, non un dato contabile certificato.
+Se un ticker non espone alcuna osservazione storica delle azioni, il sistema non
+blocca l'intera simulazione: assegna un proxy pari alla mediana delle market cap
+storiche disponibili e lo marca esplicitamente nella colonna `Metodo`. Questo caso
+va controllato prima di interpretare i pesi.
 
 Non esiste una distribuzione universalmente più profittevole. L'equal weight offre
 più esposizione alle società piccole e più concentrazione relativa; il market-cap

@@ -240,7 +240,14 @@ st.caption(f"{result.get('allocation_mode', 'Sleeve uguali per ticker')}. Il cap
 st.dataframe(allocation_table, hide_index=True, use_container_width=True)
 if result.get("market_cap_details") is not None:
     st.caption("Capitalizzazioni stimate alla prima seduta dell'intervallo selezionato.")
-    st.dataframe(pd.DataFrame(result["market_cap_details"]), hide_index=True, use_container_width=True)
+    market_cap_table = pd.DataFrame(result["market_cap_details"])
+    proxy_count = int((market_cap_table["Metodo"] != "Azioni storiche Yahoo").sum())
+    if proxy_count:
+        st.warning(
+            f"{proxy_count} ticker non hanno azioni storiche Yahoo disponibili: "
+            "è stato usato un proxy esplicito basato sulla mediana delle market cap disponibili."
+        )
+    st.dataframe(market_cap_table, hide_index=True, use_container_width=True)
 render_chart(equity, result["capital"], selected_benchmark_label)
 st.caption("Il confronto usa rendimenti normalizzati sullo stesso capitale. La valuta della quota ETF può differire dalla valuta selezionata e l'effetto cambio non è convertito.")
 

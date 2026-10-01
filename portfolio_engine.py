@@ -166,6 +166,27 @@ def historical_market_cap_weights(prices: dict[str, pd.DataFrame],
     if not records:
         raise ValueError("Azioni storiche non disponibili per calcolare i pesi market cap iniziali.")
     details = pd.DataFrame(records)
+    known_tickers = set(details["Ticker"])
+    missing_tickers = [ticker for ticker in prices if ticker not in known_tickers]
+    proxy_market_cap = float(details["Market cap iniziale"].median())
+    for ticker in missing_tickers:
+        frame = prices[ticker]
+        window = frame.loc[frame.index >= start_date]
+        if window.empty:
+            continue
+        price_date = window.index[0]
+        details.loc[len(details)] = {
+            "Ticker": ticker,
+            "Data prezzo": price_date.strftime("%Y-%m-%d"),
+            "Prezzo iniziale": float(window["Close"].iloc[0]),
+            "Data azioni": "N/D",
+            "Azioni in circolazione": np.nan,
+            "Market cap iniziale": proxy_market_cap,
+            "Metodo": "Proxy mediana ticker disponibili",
+        }
+    if "Metodo" not in details:
+        details["Metodo"] = "Azioni storiche Yahoo"
+    details["Metodo"] = details["Metodo"].fillna("Azioni storiche Yahoo")
     total = details["Market cap iniziale"].sum()
     weights = dict(zip(details["Ticker"], details["Market cap iniziale"] / total))
     return weights, details
