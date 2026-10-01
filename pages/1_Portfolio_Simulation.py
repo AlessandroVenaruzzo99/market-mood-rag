@@ -12,6 +12,7 @@ import streamlit as st
 
 from portfolio_engine import (
     download_prices,
+    buy_and_hold_portfolio,
     historical_market_cap_weights,
     simulate_portfolio,
     trim_prices,
@@ -104,6 +105,9 @@ def render_chart(equity: pd.DataFrame, capital: float, benchmark_label: str) -> 
     if "Benchmark" in equity:
         figure.add_trace(go.Scatter(x=equity.index, y=equity["Benchmark"], mode="lines",
                                     name=benchmark_label, line=dict(color="#ff922b", width=2)))
+    if "BuyHold" in equity:
+        figure.add_trace(go.Scatter(x=equity.index, y=equity["BuyHold"], mode="lines",
+                                    name="Buy & Hold ticker", line=dict(color="#51cf66", width=2)))
     figure.add_hline(y=capital, line_dash="dot", line_color="#adb5bd", annotation_text="Capitale iniziale")
     figure.update_layout(height=420, template="plotly_dark", paper_bgcolor="#0e1117",
                          plot_bgcolor="#0e1117", yaxis_title="Valore portafoglio",
@@ -165,6 +169,10 @@ if run:
                 start_date=start_date,
                 allocation_weights=allocation_weights,
             )
+            equity["BuyHold"] = buy_and_hold_portfolio(
+                prices, capital, start_date, allocation_weights
+            ).reindex(equity.index).ffill()
+            equity["BuyHold Return"] = equity["BuyHold"] / capital - 1
             benchmark_frame = benchmark_prices.get(benchmark_ticker)
             if benchmark_frame is None or benchmark_frame.empty:
                 st.warning(f"Dati non disponibili per il benchmark {benchmark_ticker}.")
@@ -206,15 +214,21 @@ portfolio_return = float(equity["Return"].iloc[-1] * 100)
 benchmark_return = (float(equity["Benchmark Return"].dropna().iloc[-1] * 100)
                     if "Benchmark Return" in equity else None)
 portfolio_profit = float(equity["Portfolio"].iloc[-1] - result["capital"])
+buyhold_return = float(equity["BuyHold Return"].dropna().iloc[-1] * 100) if "BuyHold Return" in equity else None
+buyhold_profit = float(equity["BuyHold"].dropna().iloc[-1] - result["capital"]) if "BuyHold" in equity else None
 benchmark_profit = (float(equity["Benchmark"].dropna().iloc[-1] - result["capital"])
                     if "Benchmark" in equity else None)
-metric_columns = st.columns(4)
+metric_columns = st.columns(6)
 metric_columns[0].metric("Portafoglio finale", f"{portfolio_return:+.2f}%")
 metric_columns[1].metric("Benchmark finale", f"{benchmark_return:+.2f}%" if benchmark_return is not None else "N/D")
-metric_columns[2].metric("P/L portafoglio", f"{portfolio_profit:+,.2f} {result['currency']}")
-metric_columns[3].metric("P/L benchmark", f"{benchmark_profit:+,.2f} {result['currency']}" if benchmark_profit is not None else "N/D")
+metric_columns[2].metric("Buy & Hold finale", f"{buyhold_return:+.2f}%" if buyhold_return is not None else "N/D")
+metric_columns[3].metric("P/L portafoglio", f"{portfolio_profit:+,.2f} {result['currency']}")
+metric_columns[4].metric("P/L Buy & Hold", f"{buyhold_profit:+,.2f} {result['currency']}" if buyhold_profit is not None else "N/D")
+metric_columns[5].metric("P/L benchmark", f"{benchmark_profit:+,.2f} {result['currency']}" if benchmark_profit is not None else "N/D")
 if benchmark_return is not None:
     st.caption(f"Differenza rendimento vs benchmark: {portfolio_return - benchmark_return:+.2f} punti percentuali.")
+if buyhold_return is not None:
+    st.caption(f"Differenza strategia MMM vs Buy & Hold: {portfolio_return - buyhold_return:+.2f} punti percentuali.")
 selected_benchmark_label = result.get("benchmark_label", benchmark_label if "benchmark_label" in locals() else "ETF benchmark")
 st.subheader("Allocazione iniziale")
 allocation_table = pd.DataFrame({
@@ -253,6 +267,7 @@ if models:
                 "label": result.get("benchmark_label", "ETF benchmark"),
                 "return_percent": benchmark_return,
             },
+            "buy_and_hold": {"return_percent": buyhold_return},
             "allocation": {
                 "mode": result.get("allocation_mode"),
                 "weights": result.get("allocation_weights"),

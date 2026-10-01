@@ -169,6 +169,10 @@ delle operazioni, oltre al confronto grafico e percentuale con un benchmark sele
 (MSCI World EUR Acc) oppure `SWDA.L` (MSCI World USD Acc). Il benchmark e il
 portafoglio vengono normalizzati sullo stesso capitale iniziale. La valuta della quota
 ETF può differire dalla valuta selezionata e l'effetto cambio non viene convertito.
+Il grafico include anche una strategia **Buy & Hold** sui ticker selezionati: acquisto
+alla prima chiusura dell'intervallo e mantenimento fino all'ultima seduta, usando gli
+stessi pesi iniziali del portafoglio MMM. Questo confronto separa l'effetto della
+regola di entrata/uscita dall'effetto della semplice esposizione ai titoli.
 Il modello locale può analizzare il risultato con un prompt fisso,
 usando solo i modelli Ollama già installati. Commissioni, slippage, spread, fiscalità,
 corporate actions e liquidità reale non sono simulati completamente: il backtest è uno

@@ -171,6 +171,26 @@ def historical_market_cap_weights(prices: dict[str, pd.DataFrame],
     return weights, details
 
 
+def buy_and_hold_portfolio(prices: dict[str, pd.DataFrame], capital: float,
+                           start_date: pd.Timestamp,
+                           allocation_weights: dict[str, float]) -> pd.Series:
+    """Build a passive buy-and-hold equity curve with the same initial weights."""
+    dates = sorted(set().union(*(frame.index for frame in prices.values())))
+    dates = [date for date in dates if date >= start_date]
+    if not dates:
+        raise ValueError("Nessun dato buy-and-hold nell'intervallo selezionato.")
+    curve = pd.DataFrame(index=pd.DatetimeIndex(dates))
+    for ticker, frame in prices.items():
+        window = frame.loc[frame.index >= start_date]
+        if window.empty:
+            continue
+        first_close = float(window["Close"].iloc[0])
+        sleeve = capital * allocation_weights[ticker]
+        values = window["Close"] / first_close * sleeve
+        curve[ticker] = values.reindex(curve.index).ffill().fillna(sleeve)
+    return curve.sum(axis=1).rename("BuyHold")
+
+
 def simulate_portfolio(prices: dict[str, pd.DataFrame], capital: float,
                        entry_threshold: float, exit_threshold: float,
                        dpo_period: int = 20, wyckoff_period: int = 20,
