@@ -16,6 +16,8 @@ from portfolio_engine import download_prices, simulate_portfolio, trim_prices
 OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 DEFAULT_MODEL = "qwen3.5:4b"
+BENCHMARK_TICKER = "CSPX.L"
+BENCHMARK_LABEL = "iShares Core S&P 500 UCITS ETF (CSPX.L)"
 TICKERS = [
     "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "NOVO-B.CO", "UNH",
     "8766.T", "LULU", "MRNA", "PFIZER.NS", "DPZ", "RACE", "CRM", "ADBE",
@@ -33,8 +35,9 @@ DOWNLOAD_PERIODS = {
 
 PORTFOLIO_ANALYSIS_PROMPT = """Sei un analista quantitativo senior. Analizza esclusivamente il risultato
 backtest fornito, senza inventare dati, prezzi o notizie. Distingui risultati osservati,
-calcoli e limiti del metodo. Spiega il contributo dei ticker, le operazioni generate dalle
-soglie MMM, il rendimento, il drawdown e i rischi di overfitting. Non presentare il risultato
+calcoli e limiti del metodo. Confronta il portafoglio con l'ETF S&P 500 Core indicato nel
+risultato, spiegando differenza di rendimento e profitto finale. Spiega il contributo dei
+ticker, le operazioni generate dalle soglie MMM, il rendimento, il drawdown e i rischi di overfitting. Non presentare il risultato
 come previsione né come consulenza personalizzata.
 
 Rispondi in italiano con queste sezioni:
@@ -76,10 +79,13 @@ def request_analysis(result: dict, model: str) -> str:
     return content
 
 
-def render_chart(equity: pd.DataFrame, capital: float) -> None:
+def render_chart(equity: pd.DataFrame, capital: float, benchmark_label: str) -> None:
     figure = go.Figure()
     figure.add_trace(go.Scatter(x=equity.index, y=equity["Portfolio"], mode="lines",
                                 name="Portafoglio", line=dict(color="#4dabf7", width=2)))
+    if "Benchmark" in equity:
+        figure.add_trace(go.Scatter(x=equity.index, y=equity["Benchmark"], mode="lines",
+                                    name=benchmark_label, line=dict(color="#ff922b", width=2)))
     figure.add_hline(y=capital, line_dash="dot", line_color="#adb5bd", annotation_text="Capitale iniziale")
     figure.update_layout(height=420, template="plotly_dark", paper_bgcolor="#0e1117",
                          plot_bgcolor="#0e1117", yaxis_title="Valore portafoglio",
@@ -102,6 +108,7 @@ with st.sidebar:
     commission_percent = st.number_input("Commissione per operazione (%)", min_value=0.0, max_value=10.0, value=0.0, step=0.05)
     st.caption("Il capitale viene ripartito equamente tra i ticker. Sono ammesse frazioni di azione.")
     run = st.button("Simula portafoglio", type="primary", use_container_width=True)
+    st.caption(f"Benchmark: {BENCHMARK_LABEL}")
 
 if not selected_tickers:
     st.info("Seleziona almeno un ticker nella barra laterale.")
@@ -113,10 +120,21 @@ if run:
             selected_period = PERIODS[period_label]
             prices = download_prices(selected_tickers, DOWNLOAD_PERIODS[selected_period])
             prices = trim_prices(prices, selected_period)
+            benchmark_prices = trim_prices(
+                download_prices([BENCHMARK_TICKER], DOWNLOAD_PERIODS[selected_period]),
+                selected_period,
+            )
             equity, summary, trades = simulate_portfolio(
                 prices, capital, entry_threshold, exit_threshold,
                 commission_rate=commission_percent / 100,
             )
+            benchmark_frame = benchmark_prices.get(BENCHMARK_TICKER)
+            if benchmark_frame is None or benchmark_frame.empty:
+                st.warning(f"Dati non disponibili per il benchmark {BENCHMARK_TICKER}.")
+            else:
+                benchmark_value = benchmark_frame["Close"] / benchmark_frame["Close"].iloc[0] * capital
+                equity["Benchmark"] = benchmark_value.reindex(equity.index).ffill()
+                equity["Benchmark Return"] = equity["Benchmark"] / capital - 1
         if len(prices) != len(selected_tickers):
             missing = sorted(set(selected_tickers) - set(prices))
             st.warning(f"Dati non disponibili per: {', '.join(missing)}")
@@ -124,6 +142,7 @@ if run:
             "equity": equity, "summary": summary, "trades": trades,
             "capital": capital, "currency": currency, "period": period_label,
             "tickers": list(prices), "entry": entry_threshold, "exit": exit_threshold,
+            "benchmark": BENCHMARK_TICKER,
         }
     except ValueError as exc:
         st.error(str(exc))
@@ -141,7 +160,22 @@ summary.loc[currency_metrics, "Value"] = summary.loc[currency_metrics, "Value"].
     lambda value: f"{value:,.2f} {result['currency']}"
 )
 st.dataframe(summary, hide_index=True, use_container_width=True)
-render_chart(result["equity"], result["capital"])
+equity = result["equity"]
+portfolio_return = float(equity["Return"].iloc[-1] * 100)
+benchmark_return = (float(equity["Benchmark Return"].dropna().iloc[-1] * 100)
+                    if "Benchmark Return" in equity else None)
+portfolio_profit = float(equity["Portfolio"].iloc[-1] - result["capital"])
+benchmark_profit = (float(equity["Benchmark"].dropna().iloc[-1] - result["capital"])
+                    if "Benchmark" in equity else None)
+metric_columns = st.columns(4)
+metric_columns[0].metric("Portafoglio finale", f"{portfolio_return:+.2f}%")
+metric_columns[1].metric("Benchmark finale", f"{benchmark_return:+.2f}%" if benchmark_return is not None else "N/D")
+metric_columns[2].metric("P/L portafoglio", f"{portfolio_profit:+,.2f} {result['currency']}")
+metric_columns[3].metric("P/L benchmark", f"{benchmark_profit:+,.2f} {result['currency']}" if benchmark_profit is not None else "N/D")
+if benchmark_return is not None:
+    st.caption(f"Differenza rendimento vs benchmark: {portfolio_return - benchmark_return:+.2f} punti percentuali.")
+render_chart(equity, result["capital"], BENCHMARK_LABEL)
+st.caption("Il confronto usa rendimenti normalizzati sullo stesso capitale. CSPX.L è quotato in GBP: l'effetto cambio rispetto alla valuta selezionata non è convertito.")
 
 trades = result["trades"]
 if trades:
@@ -161,6 +195,7 @@ if models:
             "trades": [trade.__dict__ for trade in trades],
             "tickers": result["tickers"], "period": result["period"],
             "thresholds": {"entry": result["entry"], "exit": result["exit"]},
+            "benchmark": {"ticker": result.get("benchmark", BENCHMARK_TICKER), "return_percent": benchmark_return},
         }
         try:
             with st.spinner("Analizzo il backtest con Ollama..."):

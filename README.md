@@ -164,7 +164,10 @@ scaricato uno storico più ampio come warm-up degli indicatori, ma il risultato 
 resta limitato all'intervallo scelto.
 
 La pagina mostra valore finale, profitto/perdita, rendimento, massimo drawdown e ledger
-delle operazioni. Il modello locale può analizzare il risultato con un prompt fisso,
+delle operazioni, oltre al confronto grafico e percentuale con `CSPX.L`, iShares Core
+S&P 500 UCITS ETF (Acc). Il benchmark e il portafoglio vengono normalizzati sullo
+stesso capitale iniziale. Poiché `CSPX.L` è quotato in GBP, l'effetto cambio rispetto
+alla valuta selezionata non viene convertito. Il modello locale può analizzare il risultato con un prompt fisso,
 usando solo i modelli Ollama già installati. Commissioni, slippage, spread, fiscalità,
 corporate actions e liquidità reale non sono simulati completamente: il backtest è uno
 strumento educativo e può essere soggetto a overfitting.
