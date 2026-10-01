@@ -6,8 +6,9 @@ if [ ! -d ".venv" ]; then
   echo "Creo ambiente virtuale…"
   python3 -m venv .venv
   ./.venv/bin/pip install --upgrade pip -q
-  ./.venv/bin/pip install -r requirements.txt
 fi
+
+./.venv/bin/pip install -r requirements.txt -q
 
 python3 check_hardware.py
 echo

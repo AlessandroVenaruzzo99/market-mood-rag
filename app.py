@@ -28,6 +28,7 @@ import streamlit as st
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import yfinance as yf
+from altman import calculate_altman_z
 from rag import (
     DEFAULT_EMBEDDING_MODEL,
     RAG_DIR,
@@ -574,6 +575,37 @@ def render_obos_section(res: pd.DataFrame) -> None:
         st.markdown(_status_box(state, desc, color, mmm), unsafe_allow_html=True)
 
 
+def render_altman_section(ticker: str, info: dict) -> None:
+    st.markdown("---")
+    st.subheader("Salute finanziaria · Altman Z-score")
+    st.caption(
+        "Formula originale per società industriali quotate: capitale circolante, utili trattenuti, "
+        "EBIT, valore di mercato del capitale e ricavi. Non è una probabilità di fallimento."
+    )
+    try:
+        result = calculate_altman_z(ticker, info)
+    except Exception as exc:
+        st.warning(f"Z-score non disponibile: {exc}")
+        return
+    if not result.applicable:
+        st.info(result.reason)
+        return
+    if result.score is None:
+        st.warning(result.reason)
+        if result.period:
+            st.caption(f"Ultimo periodo bilancio considerato: {result.period}")
+        return
+    score_col, zone_col = st.columns(2)
+    score_col.metric("Altman Z-score", f"{result.score:.2f}")
+    zone_col.metric("Classificazione", result.zone)
+    st.caption(
+        f"Bilancio: {result.period or 'non disponibile'} · fonte automatica: {result.source}. "
+        "Soglie originali: Safe > 2,99 · Grey 1,81–2,99 · Distress < 1,81."
+    )
+    with st.expander("Dettaglio dati usati"):
+        st.json(result.variables)
+
+
 def _num_or_none(value):
     try:
         number = float(value)
@@ -673,21 +705,33 @@ def render_ai_analysis(ticker: str, period: str, df: pd.DataFrame,
     )
     uploaded = st.file_uploader(
         "Documenti RAG",
-        type=["txt", "md", "csv", "json"],
+        type=["txt", "md", "csv", "json", "pdf"],
         accept_multiple_files=True,
-        help="I documenti vengono salvati localmente in rag_files/.",
+        help="I documenti vengono estratti e salvati localmente in rag_files/.",
     )
     embedding_model = st.text_input("Modello embedding Ollama", value=DEFAULT_EMBEDDING_MODEL)
+    document_ticker = st.text_input("Metadato ticker documento", value=ticker)
+    document_period = st.text_input("Metadato periodo", placeholder="Es. FY2025 o Q1 2026")
+    document_source = st.text_input("Metadato fonte", placeholder="Es. Apple Investor Relations")
+    document_date = st.text_input("Data documento", placeholder="YYYY-MM-DD")
     if uploaded and st.button("Salva e indicizza documenti", key="index_rag"):
         try:
             indexed = [save_uploaded_file(file) for file in uploaded]
             chunk_count = sum(
-                index_file(path, embedding_model.strip() or DEFAULT_EMBEDDING_MODEL)
+                index_file(path, embedding_model.strip() or DEFAULT_EMBEDDING_MODEL,
+                           ticker=document_ticker, period=document_period,
+                           source_name=document_source, document_date=document_date)
                 for path in indexed
             )
             st.success(f"Indicizzati {len(indexed)} documenti ({chunk_count} chunk).")
         except (HTTPError, URLError, TimeoutError, ValueError, OSError) as exc:
             st.error(f"Indicizzazione non riuscita: {exc}")
+
+    st.caption("Filtri retrieval, lasciabili vuoti per cercare nell'intero archivio")
+    filter_ticker = st.text_input("Filtra ticker", value=ticker, key="rag_filter_ticker")
+    filter_period = st.text_input("Filtra periodo", key="rag_filter_period")
+    filter_source = st.text_input("Filtra fonte", key="rag_filter_source")
+    filter_date = st.text_input("Filtra data documento", key="rag_filter_date")
 
     request_key = f"{ticker}|{period}|{model}|{question}|{len(df)}|{float(res['MMM'].iloc[-1]):.4f}"
     stored = st.session_state.get("ai_analysis")
@@ -699,6 +743,8 @@ def render_ai_analysis(ticker: str, period: str, df: pd.DataFrame,
                 rag_context = search_rag(
                     question or f"Analisi finanziaria di {ticker}",
                     embedding_model.strip() or DEFAULT_EMBEDDING_MODEL,
+                    ticker=filter_ticker, period=filter_period,
+                    source_name=filter_source, document_date=filter_date,
                 )
                 content = request_ollama_analysis(dossier, model, question, rag_context)
                 st.session_state["ai_analysis"] = {
@@ -774,6 +820,8 @@ except Exception as e:
     st.warning(f"Riepilogo quotazione non disponibile ora ({e}).")
     st.link_button("🔗 Apri su Yahoo Finance",
                    f"https://it.finance.yahoo.com/quote/{quote_plus(ticker)}")
+
+render_altman_section(ticker, info)
 
 render_overview_chart(ticker)
 

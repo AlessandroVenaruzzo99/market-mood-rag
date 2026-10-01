@@ -49,10 +49,16 @@ L'MMM è la **media di tre indicatori**, ciascuno normalizzato in [−100, +100]
 
 L'app include un archivio RAG locale per porre domande sui propri documenti di
 testo insieme ai dati di mercato. Sono supportati `TXT`, `Markdown`, `CSV` e
-`JSON`. I file caricati dalla pagina vengono salvati in `rag_files/`, divisi in
+`JSON` e `PDF` testuali. I file caricati dalla pagina vengono salvati in `rag_files/`, divisi in
 chunk e convertiti in embedding da Ollama. La domanda viene convertita nello
 stesso spazio vettoriale, i chunk più simili vengono recuperati e passati al
 modello generativo nel prompt.
+
+Durante il caricamento sono richiesti metadati opzionali: `ticker`, periodo,
+fonte e data del documento (`YYYY-MM-DD`). La pagina consente di usare gli stessi
+campi come filtri di retrieval. Il testo dei PDF viene estratto con `pypdf`;
+PDF scansionati come immagini richiedono OCR e non sono leggibili senza un
+passaggio aggiuntivo.
 
 Sono necessari due modelli distinti:
 
@@ -72,6 +78,32 @@ I documenti e `rag_files/index.sqlite3` sono esclusi da Git per evitare di
 pubblicare dati personali o proprietari. L'app è uno strumento di ricerca e
 sintesi, non un consulente finanziario e non garantisce completezza o
 correttezza delle fonti.
+
+
+## Altman Z-score
+
+La pagina calcola automaticamente l'Altman Z-score originale per società
+quotate non finanziarie usando i bilanci annuali disponibili tramite `yfinance`:
+
+```text
+Z = 1.2(WC/TA) + 1.4(RE/TA) + 3.3(EBIT/TA) + 0.6(MVE/TL) + Sales/TA
+```
+
+dove `WC` è il capitale circolante, `TA` il totale attivo, `RE` gli utili
+trattenuti, `EBIT` il risultato operativo, `MVE` il valore di mercato del
+capitale, `TL` le passività totali e `Sales` i ricavi. Le soglie storiche sono
+`> 2,99` safe zone, `1,81–2,99` grey zone e `< 1,81` distress zone.
+
+La formula deriva da E. I. Altman, *Financial Ratios, Discriminant Analysis and
+the Prediction of Corporate Bankruptcy*, The Journal of Finance, 1968. È un
+modello statistico storico, non una probabilità aggiornata di insolvenza e non
+deve essere usato da solo per una decisione d'investimento. Non viene applicato
+automaticamente a banche e assicurazioni, per le quali struttura patrimoniale e
+leva rendono la formula non appropriata. I filing PDF possono essere caricati
+per verificare le voci, ma il calcolo automatico usa al momento `yfinance`. Il
+market cap disponibile è normalmente corrente, mentre le altre voci provengono
+dall'ultimo bilancio annuale: il risultato può quindi combinare date diverse e
+va interpretato come screening, non come backtest storico.
 
 
 ## Nome e indipendenza del progetto
