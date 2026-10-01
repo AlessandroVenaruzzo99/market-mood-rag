@@ -834,6 +834,8 @@ with st.sidebar:
         ollama_model = ""
         st.warning("Nessun modello Ollama installato o servizio non raggiungibile.")
     run = st.button("Analizza", type="primary", use_container_width=True)
+    if hasattr(st, "page_link"):
+        st.page_link("pages/1_Portfolio_Simulation.py", label="Simulazione portafoglio", icon="📊")
 
 if not run and "loaded" not in st.session_state:
     st.info("Seleziona un ticker nella barra laterale e premi **Analizza**.")

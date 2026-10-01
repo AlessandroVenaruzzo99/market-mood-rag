@@ -149,6 +149,27 @@ parametri sono regolabili dalla barra laterale.
 Solo a scopo educativo. Non è consulenza finanziaria.
 
 
+## Simulazione portafoglio MMM
+
+La navigazione Streamlit include la pagina **Portfolio Simulation**, raggiungibile
+anche dal link nella sidebar della pagina principale. Seleziona più ticker, capitale
+e valuta, arco temporale, soglia MMM di acquisto/vendita e commissione. Il capitale
+viene distribuito equamente e sono consentite frazioni di azione.
+
+Il motore usa questa regola senza look-ahead bias: un segnale osservato alla chiusura
+del giorno `t` viene eseguito all'apertura del giorno `t+1`. Un acquisto avviene quando
+`MMM <= soglia ingresso`, una vendita quando `MMM >= soglia uscita`; le posizioni
+aperte vengono liquidate all'ultimo prezzo disponibile. Per intervalli brevi viene
+scaricato uno storico più ampio come warm-up degli indicatori, ma il risultato mostrato
+resta limitato all'intervallo scelto.
+
+La pagina mostra valore finale, profitto/perdita, rendimento, massimo drawdown e ledger
+delle operazioni. Il modello locale può analizzare il risultato con un prompt fisso,
+usando solo i modelli Ollama già installati. Commissioni, slippage, spread, fiscalità,
+corporate actions e liquidità reale non sono simulati completamente: il backtest è uno
+strumento educativo e può essere soggetto a overfitting.
+
+
 
 
 ## Analisi AI locale opzionale
