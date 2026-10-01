@@ -70,11 +70,20 @@ def installed_models() -> list[str]:
         return []
 
 
+def _json_default(value):
+    """Serialize Pandas and NumPy scalar values used in the backtest payload."""
+    if isinstance(value, (pd.Timestamp,)):
+        return value.isoformat()
+    if hasattr(value, "item"):
+        return value.item()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def request_analysis(result: dict, model: str) -> str:
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": PORTFOLIO_ANALYSIS_PROMPT.format(
-            result=json.dumps(result, ensure_ascii=False, indent=2)
+            result=json.dumps(result, ensure_ascii=False, indent=2, default=_json_default)
         )}],
         "stream": False,
         "options": {"temperature": 0.2},
