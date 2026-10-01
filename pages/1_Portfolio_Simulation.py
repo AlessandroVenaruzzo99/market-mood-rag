@@ -12,7 +12,7 @@ import streamlit as st
 
 from portfolio_engine import (
     download_prices,
-    market_cap_weights,
+    historical_market_cap_weights,
     simulate_portfolio,
     trim_prices,
 )
@@ -116,7 +116,7 @@ with st.sidebar:
     period_label = st.selectbox("Arco temporale", list(PERIODS), index=3)
     allocation_mode = st.selectbox(
         "Distribuzione del capitale",
-        ["Sleeve uguali per ticker", "Pesi market cap correnti"],
+        ["Sleeve uguali per ticker", "Pesi market cap alla data iniziale"],
         help="La liquidità resta parcheggiata nella sleeve del ticker finché MMM non attiva l'acquisto.",
     )
     entry_threshold = st.slider("Soglia acquisto MMM", -100, 0, -75)
@@ -139,10 +139,13 @@ if run:
             if not window_prices:
                 raise ValueError("Nessun dato storico nell'intervallo selezionato.")
             start_date = min(frame.index[0] for frame in window_prices.values())
-            if allocation_mode == "Pesi market cap correnti":
-                allocation_weights = market_cap_weights(window_prices)
+            if allocation_mode == "Pesi market cap alla data iniziale":
+                allocation_weights, market_cap_details = historical_market_cap_weights(
+                    prices, start_date
+                )
             else:
                 allocation_weights = {ticker: 1 / len(window_prices) for ticker in window_prices}
+                market_cap_details = None
             benchmark_prices = trim_prices(
                 download_prices([benchmark_ticker], DOWNLOAD_PERIODS[selected_period]),
                 selected_period,
@@ -171,6 +174,7 @@ if run:
             "benchmark_label": benchmark_label,
             "allocation_mode": allocation_mode,
             "allocation_weights": allocation_weights,
+            "market_cap_details": market_cap_details,
         }
     except ValueError as exc:
         st.error(str(exc))
@@ -211,6 +215,9 @@ allocation_table = pd.DataFrame({
 })
 st.caption(f"{result.get('allocation_mode', 'Sleeve uguali per ticker')}. Il capitale riservato torna liquido alla vendita del ticker.")
 st.dataframe(allocation_table, hide_index=True, use_container_width=True)
+if result.get("market_cap_details") is not None:
+    st.caption("Capitalizzazioni stimate alla prima seduta dell'intervallo selezionato.")
+    st.dataframe(pd.DataFrame(result["market_cap_details"]), hide_index=True, use_container_width=True)
 render_chart(equity, result["capital"], selected_benchmark_label)
 st.caption("Il confronto usa rendimenti normalizzati sullo stesso capitale. La valuta della quota ETF può differire dalla valuta selezionata e l'effetto cambio non è convertito.")
 
@@ -240,6 +247,10 @@ if models:
             "allocation": {
                 "mode": result.get("allocation_mode"),
                 "weights": result.get("allocation_weights"),
+                "market_caps_at_start": (
+                    result["market_cap_details"].to_dict(orient="records")
+                    if result.get("market_cap_details") is not None else None
+                ),
             },
         }
         try:

@@ -177,9 +177,14 @@ strumento educativo e può essere soggetto a overfitting.
 L'allocazione offre due modalità. **Sleeve uguali per ticker** riserva, ad esempio,
 un terzo del capitale a ciascuna società: il denaro resta liquido finché quel ticker
 non raggiunge la soglia di ingresso, e dopo la vendita torna liquido nella stessa
-sleeve. **Pesi market cap correnti** applica invece un peso proporzionale alle
-capitalizzazioni correnti; è una simulazione di scenario, non una ricostruzione
-storica point-in-time, perché le capitalizzazioni passate non sono recuperate.
+sleeve. **Pesi market cap alla data iniziale** applica invece un peso proporzionale
+alla capitalizzazione stimata all'inizio dell'intervallo: prezzo della prima
+seduta moltiplicato per l'osservazione storica più vicina delle azioni in
+circolazione disponibile tramite Yahoo Finance. La pagina mostra entrambe le date
+usate e non sostituisce silenziosamente i dati mancanti con la capitalizzazione
+corrente. Quando Yahoo non espone un'osservazione precedente, può essere usata la
+prima osservazione vicina successiva, indicata nella tabella; è quindi una stima
+point-in-time, non un dato contabile certificato.
 
 Non esiste una distribuzione universalmente più profittevole. L'equal weight offre
 più esposizione alle società piccole e più concentrazione relativa; il market-cap

@@ -117,6 +117,60 @@ def market_cap_weights(tickers: Iterable[str]) -> dict[str, float]:
     return {ticker: caps.get(ticker, 0.0) / total for ticker in tickers}
 
 
+def historical_market_cap_weights(prices: dict[str, pd.DataFrame],
+                                  start_date: pd.Timestamp) -> tuple[dict[str, float], pd.DataFrame]:
+    """Estimate point-in-time market caps at the beginning of the backtest.
+
+    The estimate uses the first close in the selected window and the nearest
+    historical shares-outstanding observation around that date. It avoids using
+    today's market cap, which would introduce look-ahead bias.
+    """
+    records: list[dict] = []
+    for ticker, frame in prices.items():
+        window = frame.loc[frame.index >= start_date]
+        if window.empty:
+            continue
+        price_date = window.index[0]
+        price = float(window["Close"].iloc[0])
+        shares_value = None
+        shares_date = None
+        try:
+            shares = yf.Ticker(ticker).get_shares_full(
+                start=price_date - pd.Timedelta(days=180),
+                end=price_date + pd.Timedelta(days=180),
+            )
+            if shares is not None and not shares.empty:
+                shares = pd.Series(shares).dropna()
+                shares.index = pd.to_datetime(shares.index)
+                if shares.index.tz is not None:
+                    shares.index = shares.index.tz_localize(None)
+                eligible = shares.loc[shares.index <= price_date]
+                if eligible.empty:
+                    # Yahoo often reports the first nearby share count after the date.
+                    eligible = shares.loc[shares.index > price_date].sort_index().head(1)
+                if not eligible.empty:
+                    shares_date = eligible.index[-1]
+                    shares_value = float(eligible.iloc[-1])
+        except (AttributeError, KeyError, TypeError, ValueError, OSError):
+            shares_value = None
+        if shares_value is None or not np.isfinite(shares_value) or shares_value <= 0:
+            continue
+        records.append({
+            "Ticker": ticker,
+            "Data prezzo": price_date.strftime("%Y-%m-%d"),
+            "Prezzo iniziale": price,
+            "Data azioni": shares_date.strftime("%Y-%m-%d") if shares_date is not None else "N/D",
+            "Azioni in circolazione": shares_value,
+            "Market cap iniziale": price * shares_value,
+        })
+    if not records:
+        raise ValueError("Azioni storiche non disponibili per calcolare i pesi market cap iniziali.")
+    details = pd.DataFrame(records)
+    total = details["Market cap iniziale"].sum()
+    weights = dict(zip(details["Ticker"], details["Market cap iniziale"] / total))
+    return weights, details
+
+
 def simulate_portfolio(prices: dict[str, pd.DataFrame], capital: float,
                        entry_threshold: float, exit_threshold: float,
                        dpo_period: int = 20, wyckoff_period: int = 20,
