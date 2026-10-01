@@ -125,7 +125,10 @@ if run:
         with st.spinner("Scarico dati storici e calcolo i segnali MMM..."):
             selected_period = PERIODS[period_label]
             prices = download_prices(selected_tickers, DOWNLOAD_PERIODS[selected_period])
-            prices = trim_prices(prices, selected_period)
+            window_prices = trim_prices(prices, selected_period)
+            if not window_prices:
+                raise ValueError("Nessun dato storico nell'intervallo selezionato.")
+            start_date = min(frame.index[0] for frame in window_prices.values())
             benchmark_prices = trim_prices(
                 download_prices([benchmark_ticker], DOWNLOAD_PERIODS[selected_period]),
                 selected_period,
@@ -133,6 +136,7 @@ if run:
             equity, summary, trades = simulate_portfolio(
                 prices, capital, entry_threshold, exit_threshold,
                 commission_rate=commission_percent / 100,
+                start_date=start_date,
             )
             benchmark_frame = benchmark_prices.get(benchmark_ticker)
             if benchmark_frame is None or benchmark_frame.empty:
@@ -141,13 +145,13 @@ if run:
                 benchmark_value = benchmark_frame["Close"] / benchmark_frame["Close"].iloc[0] * capital
                 equity["Benchmark"] = benchmark_value.reindex(equity.index).ffill()
                 equity["Benchmark Return"] = equity["Benchmark"] / capital - 1
-        if len(prices) != len(selected_tickers):
-            missing = sorted(set(selected_tickers) - set(prices))
+        if len(window_prices) != len(selected_tickers):
+            missing = sorted(set(selected_tickers) - set(window_prices))
             st.warning(f"Dati non disponibili per: {', '.join(missing)}")
         st.session_state["portfolio_result"] = {
             "equity": equity, "summary": summary, "trades": trades,
             "capital": capital, "currency": currency, "period": period_label,
-            "tickers": list(prices), "entry": entry_threshold, "exit": exit_threshold,
+            "tickers": list(window_prices), "entry": entry_threshold, "exit": exit_threshold,
             "benchmark": benchmark_ticker,
             "benchmark_label": benchmark_label,
         }

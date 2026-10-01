@@ -100,7 +100,8 @@ def simulate_portfolio(prices: dict[str, pd.DataFrame], capital: float,
                        entry_threshold: float, exit_threshold: float,
                        dpo_period: int = 20, wyckoff_period: int = 20,
                        speed_period: int = 30, normalization_window: int = 100,
-                       commission_rate: float = 0.0) -> tuple[pd.DataFrame, pd.DataFrame, list[Trade]]:
+                       commission_rate: float = 0.0,
+                       start_date: pd.Timestamp | None = None) -> tuple[pd.DataFrame, pd.DataFrame, list[Trade]]:
     if capital <= 0:
         raise ValueError("Il capitale deve essere maggiore di zero.")
     if entry_threshold >= exit_threshold:
@@ -112,6 +113,10 @@ def simulate_portfolio(prices: dict[str, pd.DataFrame], capital: float,
 
     allocation = capital / len(prices)
     all_dates = sorted(set().union(*(frame.index for frame in prices.values())))
+    if start_date is not None:
+        all_dates = [date for date in all_dates if date >= start_date]
+    if not all_dates:
+        raise ValueError("L'intervallo selezionato non contiene sedute valide.")
     equity = pd.DataFrame(index=pd.DatetimeIndex(all_dates))
     trades: list[Trade] = []
     ending_cash: dict[str, float] = {}
@@ -129,6 +134,8 @@ def simulate_portfolio(prices: dict[str, pd.DataFrame], capital: float,
         for position in range(len(frame)):
             row = frame.iloc[position]
             signal_date = frame.index[position]
+            if start_date is not None and signal_date < start_date:
+                continue
             execution_position = position + 1
             if execution_position < len(frame):
                 execution_row = frame.iloc[execution_position]
