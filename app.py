@@ -112,6 +112,22 @@ def ensure_ollama_service() -> bool:
     except OSError:
         return False
 
+
+@st.cache_data(show_spinner=False, ttl=30)
+def installed_ollama_models() -> list[str]:
+    """Returns only models currently installed in the local Ollama registry."""
+    try:
+        with urlopen("http://localhost:11434/api/tags", timeout=2) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        names = {
+            item.get("name", "").strip()
+            for item in payload.get("models", [])
+            if item.get("name")
+        }
+        return sorted(names)
+    except (HTTPError, URLError, TimeoutError, OSError, ValueError):
+        return []
+
 # Define the list of available tickers extracted from README.md
 AVAILABLE_TICKERS = [
     # Big 7 out of TESLA
@@ -783,6 +799,7 @@ def render_ai_analysis(ticker: str, period: str, df: pd.DataFrame,
 
 st.set_page_config(page_title="Market Mood Meter", layout="wide", page_icon="📈")
 ollama_available = ensure_ollama_service()
+ollama_models = installed_ollama_models() if ollama_available else []
 
 st.markdown(
     "<h1 style='margin-bottom:0'>📈 Analisi Titolo Azionario</h1>"
@@ -802,8 +819,20 @@ with st.sidebar:
     sp_p  = st.slider("Speed period (momentum)", 10, 60, 30)
     z_win = st.slider("Finestra normalizzazione DPO", 40, 250, 100, step=10)
     show_components = st.checkbox("Mostra i 3 componenti", value=False)
-    enable_ai = st.checkbox("Abilita analisi AI locale", value=True)
-    ollama_model = st.text_input("Modello Ollama", value=OLLAMA_DEFAULT_MODEL)
+    enable_ai = st.checkbox("Abilita analisi AI locale", value=bool(ollama_models),
+                            disabled=not ollama_models)
+    if st.button("Aggiorna modelli Ollama", use_container_width=True):
+        installed_ollama_models.clear()
+        st.rerun()
+    if ollama_models:
+        default_index = (ollama_models.index(OLLAMA_DEFAULT_MODEL)
+                          if OLLAMA_DEFAULT_MODEL in ollama_models else 0)
+        ollama_model = st.selectbox("Modello Ollama installato", ollama_models,
+                                    index=default_index)
+        st.caption(f"Modelli disponibili localmente: {len(ollama_models)}")
+    else:
+        ollama_model = ""
+        st.warning("Nessun modello Ollama installato o servizio non raggiungibile.")
     run = st.button("Analizza", type="primary", use_container_width=True)
 
 if not run and "loaded" not in st.session_state:
@@ -840,9 +869,9 @@ bull, bear = detect_divergences(df["Close"], res["MMM"])
 st.markdown("---")
 render_obos_section(res)
 
-if enable_ai:
+if enable_ai and ollama_model:
     st.markdown("---")
-    render_ai_analysis(ticker, period, df, info, res, ollama_model.strip() or OLLAMA_DEFAULT_MODEL)
+    render_ai_analysis(ticker, period, df, info, res, ollama_model)
 
 # --- Market Mood Meter (serie storica) --------------------------------------
 st.markdown("---")
