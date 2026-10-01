@@ -134,10 +134,12 @@ if not result:
     st.stop()
 
 summary = result["summary"].copy()
-summary.loc[summary["Metric"].isin(["Initial capital", "Final value", "Profit/Loss"]), "Value"] = \
-    summary.loc[summary["Metric"].isin(["Initial capital", "Final value", "Profit/Loss"]), "Value"].map(
-        lambda value: f"{value:,.2f} {result['currency']}"
-    )
+currency_metrics = summary["Metric"].isin(["Initial capital", "Final value", "Profit/Loss"])
+# Keep numeric values in the engine; this copy is only a mixed-type display table.
+summary["Value"] = summary["Value"].astype(object)
+summary.loc[currency_metrics, "Value"] = summary.loc[currency_metrics, "Value"].map(
+    lambda value: f"{value:,.2f} {result['currency']}"
+)
 st.dataframe(summary, hide_index=True, use_container_width=True)
 render_chart(result["equity"], result["capital"])
 
