@@ -101,6 +101,14 @@ def _cosine(left: list[float], right: list[float]) -> float:
     return dot / (left_norm * right_norm) if left_norm and right_norm else 0.0
 
 
+def indexed_chunk_count() -> int:
+    """Return the number of indexed chunks without contacting Ollama."""
+    ensure_rag_directory()
+    with sqlite3.connect(RAG_DB) as connection:
+        row = connection.execute("SELECT COUNT(*) FROM chunks").fetchone()
+    return int(row[0]) if row else 0
+
+
 def search(query: str, model: str = DEFAULT_EMBEDDING_MODEL, limit: int = 5, *,
            ticker: str = "", period: str = "", source_name: str = "",
            document_date: str = "") -> list[dict]:

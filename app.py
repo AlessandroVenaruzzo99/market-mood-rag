@@ -32,6 +32,7 @@ from altman import calculate_altman_z
 from rag import (
     DEFAULT_EMBEDDING_MODEL,
     RAG_DIR,
+    indexed_chunk_count,
     index_file,
     save_uploaded_file,
     search as search_rag,
@@ -116,7 +117,7 @@ AVAILABLE_TICKERS = [
     # Big 7 out of TESLA
     "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA",
     # DEFENSE & HEALTH
-    "NOVO-B.CO", "UNH", "8766.T", "LULU", "MRNA", "PFE", "DPZ",
+    "NOVO-B.CO", "UNH", "8766.T", "LULU", "MRNA", "PFIZER.NS", "DPZ",
     # Luxury
     "RACE",
     # Software
@@ -740,12 +741,14 @@ def render_ai_analysis(ticker: str, period: str, df: pd.DataFrame,
         dossier = build_ai_dossier(ticker, period, df, info, res)
         with st.spinner(f"Genero l'analisi di {ticker} con Ollama…"):
             try:
-                rag_context = search_rag(
-                    question or f"Analisi finanziaria di {ticker}",
-                    embedding_model.strip() or DEFAULT_EMBEDDING_MODEL,
-                    ticker=filter_ticker, period=filter_period,
-                    source_name=filter_source, document_date=filter_date,
-                )
+                rag_context = []
+                if indexed_chunk_count() > 0:
+                    rag_context = search_rag(
+                        question or f"Analisi finanziaria di {ticker}",
+                        embedding_model.strip() or DEFAULT_EMBEDDING_MODEL,
+                        ticker=filter_ticker, period=filter_period,
+                        source_name=filter_source, document_date=filter_date,
+                    )
                 content = request_ollama_analysis(dossier, model, question, rag_context)
                 st.session_state["ai_analysis"] = {
                     "key": request_key,
@@ -755,11 +758,16 @@ def render_ai_analysis(ticker: str, period: str, df: pd.DataFrame,
                 stored = st.session_state["ai_analysis"]
             except (HTTPError, URLError, TimeoutError, ValueError, OSError) as exc:
                 st.error(
-                    "Ollama non è raggiungibile o il modello non è disponibile. "
-                    f"Avvia Ollama e verifica `ollama pull {model}`. Dettaglio: {exc}"
+                    "Analisi non riuscita. Verifica Ollama e i modelli configurati: "
+                    f"`ollama pull {model}` per il modello generativo e "
+                    f"`ollama pull {embedding_model.strip() or DEFAULT_EMBEDDING_MODEL}` "
+                    f"per documenti RAG. Dettaglio: {exc}"
                 )
 
-    document_count = len([path for path in RAG_DIR.iterdir() if path.is_file()]) if RAG_DIR.exists() else 0
+    document_count = len({
+        path.name for path in RAG_DIR.iterdir()
+        if path.is_file() and path.suffix.lower() in {".txt", ".md", ".csv", ".json", ".pdf"}
+    }) if RAG_DIR.exists() else 0
     st.caption(f"Archivio locale RAG: {document_count} documenti in {RAG_DIR.name}/")
 
     if stored and stored.get("key") == request_key:
