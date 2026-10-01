@@ -16,8 +16,12 @@ from portfolio_engine import download_prices, simulate_portfolio, trim_prices
 OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 DEFAULT_MODEL = "qwen3.5:4b"
-BENCHMARK_TICKER = "CSPX.L"
-BENCHMARK_LABEL = "iShares Core S&P 500 UCITS ETF (CSPX.L)"
+BENCHMARKS = {
+    "S&P 500 Core EUR Acc · SXR8.DE": "SXR8.DE",
+    "S&P 500 Core USD Acc · CSPX.L": "CSPX.L",
+    "MSCI World EUR Acc · EUNL.DE": "EUNL.DE",
+    "MSCI World USD Acc · SWDA.L": "SWDA.L",
+}
 TICKERS = [
     "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "NOVO-B.CO", "UNH",
     "8766.T", "LULU", "MRNA", "PFIZER.NS", "DPZ", "RACE", "CRM", "ADBE",
@@ -102,13 +106,15 @@ with st.sidebar:
     selected_tickers = st.multiselect("Ticker", TICKERS, default=["AAPL", "MSFT", "NVDA"], key="portfolio_tickers")
     capital = st.number_input("Capitale iniziale", min_value=1.0, value=10000.0, step=500.0)
     currency = st.selectbox("Valuta", ["EUR", "USD", "GBP", "CHF", "JPY"])
+    benchmark_label = st.selectbox("ETF benchmark", list(BENCHMARKS), index=0)
+    benchmark_ticker = BENCHMARKS[benchmark_label]
     period_label = st.selectbox("Arco temporale", list(PERIODS), index=3)
     entry_threshold = st.slider("Soglia acquisto MMM", -100, 0, -75)
     exit_threshold = st.slider("Soglia vendita MMM", 0, 100, 70)
     commission_percent = st.number_input("Commissione per operazione (%)", min_value=0.0, max_value=10.0, value=0.0, step=0.05)
     st.caption("Il capitale viene ripartito equamente tra i ticker. Sono ammesse frazioni di azione.")
     run = st.button("Simula portafoglio", type="primary", use_container_width=True)
-    st.caption(f"Benchmark: {BENCHMARK_LABEL}")
+    st.caption(f"Benchmark selezionato: {benchmark_label}")
 
 if not selected_tickers:
     st.info("Seleziona almeno un ticker nella barra laterale.")
@@ -121,16 +127,16 @@ if run:
             prices = download_prices(selected_tickers, DOWNLOAD_PERIODS[selected_period])
             prices = trim_prices(prices, selected_period)
             benchmark_prices = trim_prices(
-                download_prices([BENCHMARK_TICKER], DOWNLOAD_PERIODS[selected_period]),
+                download_prices([benchmark_ticker], DOWNLOAD_PERIODS[selected_period]),
                 selected_period,
             )
             equity, summary, trades = simulate_portfolio(
                 prices, capital, entry_threshold, exit_threshold,
                 commission_rate=commission_percent / 100,
             )
-            benchmark_frame = benchmark_prices.get(BENCHMARK_TICKER)
+            benchmark_frame = benchmark_prices.get(benchmark_ticker)
             if benchmark_frame is None or benchmark_frame.empty:
-                st.warning(f"Dati non disponibili per il benchmark {BENCHMARK_TICKER}.")
+                st.warning(f"Dati non disponibili per il benchmark {benchmark_ticker}.")
             else:
                 benchmark_value = benchmark_frame["Close"] / benchmark_frame["Close"].iloc[0] * capital
                 equity["Benchmark"] = benchmark_value.reindex(equity.index).ffill()
@@ -142,7 +148,8 @@ if run:
             "equity": equity, "summary": summary, "trades": trades,
             "capital": capital, "currency": currency, "period": period_label,
             "tickers": list(prices), "entry": entry_threshold, "exit": exit_threshold,
-            "benchmark": BENCHMARK_TICKER,
+            "benchmark": benchmark_ticker,
+            "benchmark_label": benchmark_label,
         }
     except ValueError as exc:
         st.error(str(exc))
@@ -174,8 +181,9 @@ metric_columns[2].metric("P/L portafoglio", f"{portfolio_profit:+,.2f} {result['
 metric_columns[3].metric("P/L benchmark", f"{benchmark_profit:+,.2f} {result['currency']}" if benchmark_profit is not None else "N/D")
 if benchmark_return is not None:
     st.caption(f"Differenza rendimento vs benchmark: {portfolio_return - benchmark_return:+.2f} punti percentuali.")
-render_chart(equity, result["capital"], BENCHMARK_LABEL)
-st.caption("Il confronto usa rendimenti normalizzati sullo stesso capitale. CSPX.L è quotato in GBP: l'effetto cambio rispetto alla valuta selezionata non è convertito.")
+selected_benchmark_label = result.get("benchmark_label", benchmark_label if "benchmark_label" in locals() else "ETF benchmark")
+render_chart(equity, result["capital"], selected_benchmark_label)
+st.caption("Il confronto usa rendimenti normalizzati sullo stesso capitale. La valuta della quota ETF può differire dalla valuta selezionata e l'effetto cambio non è convertito.")
 
 trades = result["trades"]
 if trades:
@@ -195,7 +203,11 @@ if models:
             "trades": [trade.__dict__ for trade in trades],
             "tickers": result["tickers"], "period": result["period"],
             "thresholds": {"entry": result["entry"], "exit": result["exit"]},
-            "benchmark": {"ticker": result.get("benchmark", BENCHMARK_TICKER), "return_percent": benchmark_return},
+            "benchmark": {
+                "ticker": result.get("benchmark", "non disponibile"),
+                "label": result.get("benchmark_label", "ETF benchmark"),
+                "return_percent": benchmark_return,
+            },
         }
         try:
             with st.spinner("Analizzo il backtest con Ollama..."):

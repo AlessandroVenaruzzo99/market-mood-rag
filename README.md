@@ -164,10 +164,12 @@ scaricato uno storico più ampio come warm-up degli indicatori, ma il risultato 
 resta limitato all'intervallo scelto.
 
 La pagina mostra valore finale, profitto/perdita, rendimento, massimo drawdown e ledger
-delle operazioni, oltre al confronto grafico e percentuale con `CSPX.L`, iShares Core
-S&P 500 UCITS ETF (Acc). Il benchmark e il portafoglio vengono normalizzati sullo
-stesso capitale iniziale. Poiché `CSPX.L` è quotato in GBP, l'effetto cambio rispetto
-alla valuta selezionata non viene convertito. Il modello locale può analizzare il risultato con un prompt fisso,
+delle operazioni, oltre al confronto grafico e percentuale con un benchmark selezionabile:
+`SXR8.DE` (S&P 500 Core EUR Acc), `CSPX.L` (S&P 500 Core USD Acc), `EUNL.DE`
+(MSCI World EUR Acc) oppure `SWDA.L` (MSCI World USD Acc). Il benchmark e il
+portafoglio vengono normalizzati sullo stesso capitale iniziale. La valuta della quota
+ETF può differire dalla valuta selezionata e l'effetto cambio non viene convertito.
+Il modello locale può analizzare il risultato con un prompt fisso,
 usando solo i modelli Ollama già installati. Commissioni, slippage, spread, fiscalità,
 corporate actions e liquidità reale non sono simulati completamente: il backtest è uno
 strumento educativo e può essere soggetto a overfitting.
